@@ -57,7 +57,7 @@ public:
 	//this is the title of the box in workspace. it should be short
 	const char* GetTitle () const
 	{
-		return "Bilateral 2";
+		return "Max Bilateral";
 	}
 	
 	// this will appear in the help pane, you can put your credits and short info
@@ -132,7 +132,7 @@ public:
 
 
 		AddParameter( PARAM_RADIUS ,"Radius", 5.0, 1.0, 255.0, TYPE_SLIDER, 0.0);
-		AddParameter( PARAM_SIGMA_C ,"Color Sigma", 0.25, 0.01, 1.0, TYPE_SLIDER, 0.0);
+		AddParameter( PARAM_SIGMA_C ,"Color Sigma", 0.25, 0.1, 5.0, TYPE_SLIDER, 0.0);
 
 		return NUMBER_OF_USER_PARAMS;
 	}
@@ -152,49 +152,22 @@ public:
 
 		int halfsize = size / 2;//int halfsize = radius + 1;//
 
-		float* verticaltemp=new float[nWidth * nHeight * 4]; // this is our tempory buffer to store image blurred vertically
-		float* horizonaltemp=new float[nWidth * nHeight * 4];// this is our tempory buffer to store image blurred horizonally
-		float* temp = new float[nWidth * nHeight * 4];//working in the 0-1 range
+		BYTE* verticaltemp=new BYTE[nWidth * nHeight * 4]; // this is our tempory buffer to store image blurred vertically
+		BYTE* horizonaltemp=new BYTE[nWidth * nHeight * 4];// this is our tempory buffer to store image blurred horizonally
 		 
-		float red;
-		float green;
-		float blue;
+		double red;
+		double green;
+		double blue;
 		//float alpha;
 
-		float colorspace = 255.0f;
+		double colorspace = 255.0f;
 
-		float sum;
+		double sum;
 
-		float redsum;
-		float greensum;
-		float bluesum;
+		double redsum;
+		double greensum;
+		double bluesum;
 		//double alphasum;
-
-		float spatialContraDecay = 1.0 - dSigmaC;
-		float rho = 1.0 + spatialContraDecay;
-		float c = -0.5 / (radius * radius);
-
-
-//place our image in a seperate array in the 0-1 range, where 0 is darkest and 1 is lightest
-		for (int x = 0; x < nWidth; x++)
-		{
-			for (int y = 0; y < nHeight; y++)
-			{
-					int nIdx = x * 4 + y * 4 * nWidth;
-
-					float red = pBGRA_in[nIdx + CHANNEL_R] / colorspace;
-					float green = pBGRA_in[nIdx + CHANNEL_G] / colorspace;
-					float blue = pBGRA_in[nIdx + CHANNEL_B] / colorspace;
-
-					temp[nIdx + CHANNEL_R] = red;
-					temp[nIdx + CHANNEL_G] = green;
-					temp[nIdx + CHANNEL_B] = blue;
-			}
-		}
-
-
-
-
 
 
 		#pragma region		//blurs vertically
@@ -213,44 +186,41 @@ public:
 				blue = 0;//blue
 				// alpha = 0;//alpha
 
-				int widthminus = nWidth - 1;
-
 				//This is our Kernel
 				//accumulate colors
-				for(int i = y - radius; i <= y + radius; i++)
+				for(int i = max(0, y - size); i <= MIN(nHeight - 1,y + size); i++)
 				{
-					if (i < 0 || i > widthminus) continue;
-					{
-						// this slides / moves along the kernel to collect the neighboring pixels
-						float redKernelSlider   = temp[(x + i * nWidth) * 4 + CHANNEL_R];
-						float greenKernelSlider = temp[(x + i * nWidth) * 4 + CHANNEL_G];
-						float blueKernelSlider  = temp[(x + i * nWidth) * 4 + CHANNEL_B];
-						//this slides / moves along the kernel to collect the neighboring pixels
+					float factor = expf(-(i - y) * (i - y) / (sigma));					
+					sum += factor;
 
-						// this stays in center of kernel
-						float redKernelCenter   = temp[(x + y * nWidth) * 4 + CHANNEL_R];
-						float greenKernelCenter = temp[(x + y * nWidth) * 4 + CHANNEL_G];
-						float blueKernelCenter  = temp[(x + y * nWidth) * 4 + CHANNEL_B];
-						// this stays in center of kernel
+					// this slides / moves along the kernel to collect the neighboring pixels
+					double redKernelSlider   = pBGRA_in[(x + i * nWidth) * 4 + CHANNEL_R] / colorspace;
+					double greenKernelSlider = pBGRA_in[(x + i * nWidth) * 4 + CHANNEL_G] / colorspace;
+					double blueKernelSlider  = pBGRA_in[(x + i * nWidth) * 4 + CHANNEL_B] / colorspace;
+					//this slides / moves along the kernel to collect the neighboring pixels
 
-						float redDiff   =  redKernelCenter - redKernelSlider * rho;//abs(redKernelSlider - redKernelCenter);
-						float greenDiff =  greenKernelCenter - greenKernelSlider * rho;//abs(greenKernelSlider - greenKernelCenter);
-						float blueDiff  =  blueKernelCenter - blueKernelSlider * rho;//abs(blueKernelSlider - blueKernelCenter);
+					// this stays in center of kernel
+					double redKernelCenter   = pBGRA_in[(x + y * nWidth) * 4 + CHANNEL_R] / colorspace;
+					double greenKernelCenter = pBGRA_in[(x + y * nWidth) * 4 + CHANNEL_G] / colorspace;
+					double blueKernelCenter  = pBGRA_in[(x + y * nWidth) * 4 + CHANNEL_B] / colorspace;
+					// this stays in center of kernel
 
-						//float RcolorDist = max (0,  min(1.0f, ((dSigmaC * dSigmaC) * 0.5) / ((redDiff * redDiff) * halfsize) ));
-						//float GcolorDist = max (0,  min(1.0f, ((dSigmaC * dSigmaC) * 0.5) / ((greenDiff * greenDiff) * halfsize)));
-						//float BcolorDist = max (0,  min(1.0f, ((dSigmaC * dSigmaC) * 0.5) / ((blueDiff * blueDiff) * halfsize)));
+					double redDiff   =  abs(redKernelSlider - redKernelCenter);
+					double greenDiff =  abs(greenKernelSlider - greenKernelCenter);
+					double blueDiff  =  abs(blueKernelSlider - blueKernelCenter);
 
-						float RcolorDist = spatialContraDecay * expf (c * redDiff * redDiff);
-						float GcolorDist = spatialContraDecay * expf (c * greenDiff * greenDiff);
-						float BcolorDist = spatialContraDecay * expf (c * blueDiff * blueDiff);
+					//double RcolorDist = max (0,  min(1.0f, ((dSigmaC * dSigmaC) * 0.5) / ((redDiff * redDiff) * dRadius) ));
+					//double GcolorDist = max (0,  min(1.0f, ((dSigmaC * dSigmaC) * 0.5) / ((greenDiff * greenDiff) * dRadius)));
+					//double BcolorDist = max (0,  min(1.0f, ((dSigmaC * dSigmaC) * 0.5) / ((blueDiff * blueDiff) * dRadius)));
 
+					double RcolorDist = max (0,  min(1.0f, ((dSigmaC * dSigmaC) * 0.5) / ((redDiff * redDiff) * halfsize) ));
+					double GcolorDist = max (0,  min(1.0f, ((dSigmaC * dSigmaC) * 0.5) / ((greenDiff * greenDiff) * halfsize)));
+					double BcolorDist = max (0,  min(1.0f, ((dSigmaC * dSigmaC) * 0.5) / ((blueDiff * blueDiff) * halfsize)));
 					
-						{
-							red   += RcolorDist * temp[(x + i * nWidth) * 4 + CHANNEL_R];
-							green += GcolorDist * temp[(x + i * nWidth) * 4 + CHANNEL_G];
-							blue  += BcolorDist * temp[(x + i * nWidth) * 4 + CHANNEL_B];
-						}
+					{
+						red   += factor * RcolorDist * pBGRA_in[(x + i * nWidth) * 4 + CHANNEL_R];
+						green += factor * GcolorDist * pBGRA_in[(x + i * nWidth) * 4 + CHANNEL_G];
+						blue  += factor * BcolorDist * pBGRA_in[(x + i * nWidth) * 4 + CHANNEL_B];
 					}
 				}//end I
 
@@ -274,7 +244,7 @@ public:
 
 
 
-		
+		/*
 		for (int x = 0; x< nWidth; x++)
 		{
 			for (int y = 0; y< nHeight; y++)
@@ -285,12 +255,12 @@ public:
 				int nG = verticaltemp [nIdx + CHANNEL_G];
 				int nB = verticaltemp [nIdx + CHANNEL_B];
 
-				pBGRA_out[nIdx + CHANNEL_R] = CLAMP255(nR * colorspace);
-				pBGRA_out[nIdx + CHANNEL_G] = CLAMP255(nG * colorspace);
-				pBGRA_out[nIdx + CHANNEL_B] = CLAMP255(nB * colorspace);
+			//	pBGRA_out[nIdx + CHANNEL_R] = nR;
+			//	pBGRA_out[nIdx + CHANNEL_G] = nG;
+			//	pBGRA_out[nIdx + CHANNEL_B] = nB;				
 			}
 		}
-		
+		*/
 	#pragma endregion
 
 		//blurs horizonally
@@ -309,42 +279,37 @@ public:
 				blue = 0;//blue
 				// alpha = 0;//alpha
 
-				int widthminus = nWidth - 1;
-
 				//This is our Kernel
 				//accumulate colors
-				for(int i = x - radius; i <= x + radius; i++)
+				for(int i = max(0, x - size); i <= MIN(nWidth - 1, x + size); i++)
 				{
-					if (i < 0 || i > widthminus) continue;
+					float factor = expf(-(i - x) * (i - x) / (sigma));
+					sum += factor;
+
+					//this slides / moves along the kernel to collect the neighboring pixels
+					double redKernelSlider   = pBGRA_in[(i + y * nWidth) * 4 + CHANNEL_R] / colorspace;
+					double greenKernelSlider = pBGRA_in[(i + y * nWidth) * 4 + CHANNEL_G] / colorspace;
+					double blueKernelSlider  = pBGRA_in[(i + y * nWidth) * 4 + CHANNEL_B] / colorspace;
+					//this slides / moves along the kernel to collect the neighboring pixels
+
+					// this stays in center of kernel
+					double redKernelCenter   = pBGRA_in[(x + y * nWidth) * 4 + CHANNEL_R] / colorspace;
+					double greenKernelCenter = pBGRA_in[(x + y * nWidth) * 4 + CHANNEL_G] / colorspace;
+					double blueKernelCenter  = pBGRA_in[(x + y * nWidth) * 4 + CHANNEL_B] / colorspace;
+					// this stays in center of kernel
+
+					double redDiff   =  abs(redKernelSlider - redKernelCenter);
+					double greenDiff =  abs(greenKernelSlider - greenKernelCenter);
+					double blueDiff  =  abs(blueKernelSlider - blueKernelCenter);
+
+					double RcolorDist = max (0,  min(1.0f, ((dSigmaC * dSigmaC) * 0.5) / ((redDiff * redDiff) * halfsize) ));
+					double GcolorDist = max (0,  min(1.0f, ((dSigmaC * dSigmaC) * 0.5) / ((greenDiff * greenDiff) * halfsize)));
+					double BcolorDist = max (0,  min(1.0f, ((dSigmaC * dSigmaC) * 0.5) / ((blueDiff * blueDiff) * halfsize)));
+
 					{
-						float factor = expf(-(i - x) * (i - x) / (sigma));
-						sum += factor;
-
-						//this slides / moves along the kernel to collect the neighboring pixels
-						float redKernelSlider   = temp[(i + y * nWidth) * 4 + CHANNEL_R];
-						float greenKernelSlider = temp[(i + y * nWidth) * 4 + CHANNEL_G];
-						float blueKernelSlider  = temp[(i + y * nWidth) * 4 + CHANNEL_B];
-						//this slides / moves along the kernel to collect the neighboring pixels
-
-						// this stays in center of kernel
-						float redKernelCenter   = temp[(x + y * nWidth) * 4 + CHANNEL_R];
-						float greenKernelCenter = temp[(x + y * nWidth) * 4 + CHANNEL_G];
-						float blueKernelCenter  = temp[(x + y * nWidth) * 4 + CHANNEL_B];
-						// this stays in center of kernel
-
-						float redDiff   =  abs(redKernelSlider - redKernelCenter);
-						float greenDiff =  abs(greenKernelSlider - greenKernelCenter);
-						float blueDiff  =  abs(blueKernelSlider - blueKernelCenter);
-
-						float RcolorDist = max (0,  min(1.0f, ((dSigmaC * dSigmaC) * 0.5) / ((redDiff * redDiff) * halfsize) ));
-						float GcolorDist = max (0,  min(1.0f, ((dSigmaC * dSigmaC) * 0.5) / ((greenDiff * greenDiff) * halfsize)));
-						float BcolorDist = max (0,  min(1.0f, ((dSigmaC * dSigmaC) * 0.5) / ((blueDiff * blueDiff) * halfsize)));
-
-						{
-							red   += factor * (RcolorDist) * pBGRA_in[(i + y * nWidth) * 4 + CHANNEL_R];
-							green += factor * (GcolorDist) * pBGRA_in[(i + y * nWidth) * 4 + CHANNEL_G];
-							blue  += factor * (BcolorDist) * pBGRA_in[(i + y * nWidth) * 4 + CHANNEL_B];
-						}
+						red   += factor * (RcolorDist) * pBGRA_in[(i + y * nWidth) * 4 + CHANNEL_R];
+						green += factor * (GcolorDist) * pBGRA_in[(i + y * nWidth) * 4 + CHANNEL_G];
+						blue  += factor * (BcolorDist) * pBGRA_in[(i + y * nWidth) * 4 + CHANNEL_B];
 					}
 				}//end I
 
@@ -397,13 +362,9 @@ public:
 				int vertG = verticaltemp [nIdx + CHANNEL_G];
 				int vertB = verticaltemp [nIdx + CHANNEL_B];
 
-				int combinered = horizR + vertR / 2;
-				int combinegreen = horizG + vertG / 2;
-				int combineblue = horizB + vertB / 2;
-
-				//pBGRA_out[nIdx + CHANNEL_R] = combinered;
-				//pBGRA_out[nIdx + CHANNEL_G] = combinegreen;
-				//pBGRA_out[nIdx + CHANNEL_B] = combineblue;
+				pBGRA_out[nIdx + CHANNEL_R] = max (horizR,vertR);
+				pBGRA_out[nIdx + CHANNEL_G] = max (horizG,vertG);
+				pBGRA_out[nIdx + CHANNEL_B] = max (horizB,vertB);
 			}
 		}
 
@@ -562,7 +523,7 @@ extern "C"
 // this is the name that will appear in the object library
 extern "C" __declspec(dllexport) char* GetPluginName()
 {
-	return "!Andys Bilateral 2";	
+	return "Andys Bilateral";	
 }
 
 
@@ -572,7 +533,7 @@ extern "C" __declspec(dllexport) char* GetPluginID()
 {
 	
 	
-	return "com.lumafilters.seperablebilateral";
+	return "com.lumafilters.maxseperablebilateral";
 	
 }
 
